@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lista de artículos</title>
+<style>
+  :root { color-scheme: light dark; --fondo: #f5f5f4; --tarjeta: #fff; --texto: #1c1917; --suave: #78716c; --acento: #2563eb; }
+  @media (prefers-color-scheme: dark) { :root { --fondo: #1c1917; --tarjeta: #292524; --texto: #f5f5f4; --suave: #a8a29e; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: var(--fondo); color: var(--texto); }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px; }
+  form { display: grid; gap: 8px; background: var(--tarjeta); padding: 16px; border-radius: 12px; margin-bottom: 24px; }
+  input, textarea, button { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid #a8a29e55; background: transparent; color: inherit; }
+  button { background: var(--acento); color: #fff; border: none; cursor: pointer; }
+  button:disabled { opacity: .6; }
+  #lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .tarjeta { background: var(--tarjeta); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  .tarjeta img, .sinPortada { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #a8a29e33; display: grid; place-items: center; color: var(--suave); }
+  .cuerpo { padding: 12px; display: grid; gap: 6px; flex: 1; align-content: start; }
+  .cuerpo h2 { margin: 0; font-size: 1.05rem; }
+  .cuerpo h2 a { color: inherit; text-decoration: none; }
+  .cuerpo h2 a:hover { text-decoration: underline; }
+  .cuerpo p { margin: 0; color: var(--suave); font-size: .9rem; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .enlacePortada { display: block; }
+  #detalle { width: min(720px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; border: none; border-radius: 12px; background: var(--tarjeta); color: var(--texto); }
+  #detalle::backdrop { background: #0009; }
+  #detalle img, #detalle .sinPortada { width: 100%; max-height: 60vh; object-fit: contain; background: #a8a29e22; display: block; }
+  #detalle .sinPortada { aspect-ratio: 16/9; display: grid; place-items: center; color: var(--suave); }
+  .contenidoDetalle { padding: 20px; display: grid; gap: 12px; }
+  .contenidoDetalle h2 { margin: 0; }
+  .contenidoDetalle p { margin: 0; white-space: pre-wrap; line-height: 1.5; }
+  .datosDetalle { color: var(--suave); font-size: .85rem; }
+  .accionesDetalle { display: flex; gap: 8px; justify-content: flex-end; }
+  .accionesDetalle a { background: var(--acento); color: #fff; padding: 10px 16px; border-radius: 8px; text-decoration: none; }
+  .accionesDetalle button { background: transparent; color: inherit; border: 1px solid #a8a29e55; }
+  .zonaImagen { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; border: 1px dashed #a8a29e88; border-radius: 8px; padding: 10px; color: var(--suave); font-size: .9rem; }
+  .zonaImagen img { height: 64px; border-radius: 6px; }
+  .zonaImagen button { padding: 4px 10px; background: transparent; color: var(--suave); border: 1px solid #a8a29e55; }
+  .aviso { background: var(--tarjeta); border-left: 4px solid var(--acento); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; }
+  .aviso h2 { margin: 0 0 6px; font-size: 1.1rem; }
+  .aviso p { margin: 0; line-height: 1.5; }
+  .borrar { background: transparent; color: var(--suave); padding: 4px; justify-self: end; font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lista de artículos</h1>
+  <form id="formulario">
+    <input name="nombre" placeholder="Nombre del artículo" required>
+    <textarea name="descripcion" placeholder="Descripción" rows="2"></textarea>
+    <input name="link" type="url" placeholder="https://..." required>
+    <div class="zonaImagen">
+      <label>Imagen propia (opcional): <input type="file" id="selectorImagen" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+      <span>o pegá una imagen con Ctrl+V</span>
+      <img id="vistaPrevia" alt="Vista previa" hidden>
+      <button type="button" id="quitarImagen" hidden>Quitar</button>
+    </div>
+    <button id="botonAgregar">Agregar</button>
+  </form>
+  <section class="aviso">
+    <h2>Sobre los regalos</h2>
+    <p>Si bien me encantaría recibir cualquiera de estos artículos completo, con el simple hecho de contribuir con una parte del regalo ya sería muy feliz y me ayudaría un montón</p>
+  </section>
+  <div id="lista"></div>
+</main>
+<dialog id="detalle">
+  <div id="portadaDetalle"></div>
+  <div class="contenidoDetalle">
+    <h2 id="nombreDetalle"></h2>
+    <div class="datosDetalle" id="datosDetalle"></div>
+    <p id="descripcionDetalle"></p>
+    <div class="accionesDetalle">
+      <button type="button" id="cerrarDetalle">Cerrar</button>
+      <a id="linkDetalle" target="_blank" rel="noopener">Abrir link ↗</a>
+    </div>
+  </div>
+</dialog>
+<script>
+  const formulario = document.getElementById('formulario');
+  const lista = document.getElementById('lista');
+  const selectorImagen = document.getElementById('selectorImagen');
+  const vistaPrevia = document.getElementById('vistaPrevia');
+  const quitarImagen = document.getElementById('quitarImagen');
+  const tiposPermitidos = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+  let imagenPropia = null; // data URL de la imagen elegida o pegada
+  const articulosPorId = new Map();
+  const detalle = document.getElementById('detalle');
+
+  function usarImagen(archivo) {
+    if (!tiposPermitidos.includes(archivo.type)) return alert('La imagen debe ser PNG, JPG, GIF o WEBP');
+    if (archivo.size > 5 * 1024 * 1024) return alert('La imagen no puede superar 5 MB');
+    const lector = new FileReader();
+    lector.onload = () => {
+      imagenPropia = lector.result;
+      vistaPrevia.src = imagenPropia;
+      vistaPrevia.hidden = quitarImagen.hidden = false;
+    };
+    lector.readAsDataURL(archivo);
+  }
+
+  function limpiarImagen() {
+    imagenPropia = null;
+    selectorImagen.value = '';
+    vistaPrevia.removeAttribute('src');
+    vistaPrevia.hidden = quitarImagen.hidden = true;
+  }
+
+  selectorImagen.onchange = () => selectorImagen.files[0] && usarImagen(selectorImagen.files[0]);
+  quitarImagen.onclick = limpiarImagen;
+  document.addEventListener('paste', (evento) => {
+    const archivo = [...evento.clipboardData.files].find(f => f.type.startsWith('image/'));
+    if (archivo) { evento.preventDefault(); usarImagen(archivo); }
+  });
+
+  function crearPortada(articulo) {
+    const sinPortada = () => Object.assign(document.createElement('div'), { className: 'sinPortada', textContent: 'Sin portada' });
+    if (!articulo.portada) return sinPortada();
+    const portada = Object.assign(document.createElement('img'), { src: articulo.portada, alt: '', loading: 'lazy' });
+    portada.onerror = () => portada.replaceWith(sinPortada());
+    return portada;
+  }
+
+  function crearTarjeta(articulo) {
+    articulosPorId.set(articulo.id, articulo);
+    const tarjeta = document.createElement('article');
+    tarjeta.className = 'tarjeta';
+    const enlacePortada = Object.assign(document.createElement('a'), { href: `#${articulo.id}`, className: 'enlacePortada', tabIndex: -1 });
+    enlacePortada.setAttribute('aria-hidden', 'true');
+    enlacePortada.append(crearPortada(articulo));
+    const cuerpo = document.createElement('div');
+    cuerpo.className = 'cuerpo';
+    const titulo = document.createElement('h2');
+    const enlace = Object.assign(document.createElement('a'), { href: `#${articulo.id}`, textContent: articulo.nombre });
+    titulo.append(enlace);
+    const descripcion = Object.assign(document.createElement('p'), { textContent: articulo.descripcion });
+    const botonBorrar = Object.assign(document.createElement('button'), { className: 'borrar', textContent: 'Eliminar' });
+    botonBorrar.onclick = async () => {
+      if (!confirm(`¿Eliminar "${articulo.nombre}"?`)) return;
+      await fetch(`/api/articulos/${articulo.id}`, { method: 'DELETE' });
+      articulosPorId.delete(articulo.id);
+      tarjeta.remove();
+    };
+    cuerpo.append(titulo, descripcion, botonBorrar);
+    tarjeta.append(enlacePortada, cuerpo);
+    return tarjeta;
+  }
+
+  async function cargarArticulos() {
+    const articulos = await (await fetch('/api/articulos')).json();
+    lista.replaceChildren(...articulos.map(crearTarjeta));
+    mostrarDetalleSegunUrl();
+  }
+
+  // La URL #<id> abre el detalle: se puede compartir y el botón Atrás lo cierra
+  function mostrarDetalleSegunUrl() {
+    const articulo = articulosPorId.get(location.hash.slice(1));
+    if (!articulo) return detalle.open && detalle.close();
+    const portada = crearPortada(articulo);
+    portada.loading = 'eager';
+    document.getElementById('portadaDetalle').replaceChildren(portada);
+    document.getElementById('nombreDetalle').textContent = articulo.nombre;
+    document.getElementById('descripcionDetalle').textContent = articulo.descripcion || 'Sin descripción';
+    const fecha = new Date(Number(articulo.id)).toLocaleDateString('es', { dateStyle: 'long' });
+    document.getElementById('datosDetalle').textContent = `${new URL(articulo.link).hostname} · agregado el ${fecha}`;
+    document.getElementById('linkDetalle').href = articulo.link;
+    if (!detalle.open) detalle.showModal();
+  }
+
+  window.addEventListener('hashchange', mostrarDetalleSegunUrl);
+  function limpiarUrl() {
+    if (location.hash) history.replaceState(null, '', location.pathname);
+  }
+  function cerrarDetalle() {
+    detalle.close();
+    limpiarUrl();
+  }
+  document.getElementById('cerrarDetalle').onclick = cerrarDetalle;
+  detalle.onclick = (evento) => { if (evento.target === detalle) cerrarDetalle(); }; // click en el fondo
+  detalle.onclose = limpiarUrl; // cierre con Esc
+
+  formulario.onsubmit = async (evento) => {
+    evento.preventDefault();
+    const boton = document.getElementById('botonAgregar');
+    boton.disabled = true;
+    boton.textContent = imagenPropia ? 'Guardando...' : 'Buscando portada...';
+    const respuesta = await fetch('/api/articulos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...Object.fromEntries(new FormData(formulario)), imagen: imagenPropia }),
+    });
+    const datos = await respuesta.json();
+    if (respuesta.ok) { lista.prepend(crearTarjeta(datos)); formulario.reset(); limpiarImagen(); }
+    else alert(datos.error);
+    boton.disabled = false;
+    boton.textContent = 'Agregar';
+  };
+
+  cargarArticulos();
+</script>
+</body>
+</html>
