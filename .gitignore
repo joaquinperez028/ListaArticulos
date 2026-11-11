@@ -1,3 +1,5 @@
 node_modules/
 articulos.json
 imagenes/
+.env*.local
+.vercel

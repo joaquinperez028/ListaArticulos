@@ -2,5 +2,12 @@
   "name": "lista-articulos",
   "version": "1.0.0",
   "private": true,
-  "scripts": { "start": "node server.js" }
+  "scripts": {
+    "start": "node --env-file-if-exists=.env.local servidorLocal.js",
+    "migrar": "node --env-file-if-exists=.env.local scripts/migrar.js"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.41.0",
+    "@vercel/blob": "^2.9.0"
+  }
 }

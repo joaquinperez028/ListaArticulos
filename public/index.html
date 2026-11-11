@@ -40,13 +40,19 @@
   .aviso { background: var(--tarjeta); border-left: 4px solid var(--acento); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; }
   .aviso h2 { margin: 0 0 6px; font-size: 1.1rem; }
   .aviso p { margin: 0; line-height: 1.5; }
+  body:not(.modoAdmin) .soloAdmin, .modoAdmin .soloVisitante { display: none !important; }
+  footer { max-width: 1000px; margin: 0 auto; padding: 8px 16px 32px; color: var(--suave); font-size: .85rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  footer summary { cursor: pointer; }
+  footer form { display: flex; gap: 8px; padding: 8px 0 0; margin: 0; background: none; }
+  footer input, footer button { padding: 6px 10px; }
+  #salirAdmin { background: transparent; color: var(--suave); border: 1px solid #a8a29e55; }
   .borrar { background: transparent; color: var(--suave); padding: 4px; justify-self: end; font-size: .85rem; }
 </style>
 </head>
 <body>
 <main>
   <h1>Lista de artículos</h1>
-  <form id="formulario">
+  <form id="formulario" class="soloAdmin">
     <input name="nombre" placeholder="Nombre del artículo" required>
     <textarea name="descripcion" placeholder="Descripción" rows="2"></textarea>
     <input name="link" type="url" placeholder="https://..." required>
@@ -64,6 +70,17 @@
   </section>
   <div id="lista"></div>
 </main>
+<footer>
+  <details class="soloVisitante">
+    <summary>Administrar</summary>
+    <form id="formularioAdmin">
+      <input type="password" id="claveAdmin" placeholder="Clave" autocomplete="current-password" required>
+      <button>Entrar</button>
+    </form>
+  </details>
+  <span class="soloAdmin">Modo administrador</span>
+  <button type="button" id="salirAdmin" class="soloAdmin">Salir</button>
+</footer>
 <dialog id="detalle">
   <div id="portadaDetalle"></div>
   <div class="contenidoDetalle">
@@ -86,10 +103,29 @@
   let imagenPropia = null; // data URL de la imagen elegida o pegada
   const articulosPorId = new Map();
   const detalle = document.getElementById('detalle');
+  let claveAdmin = null;
+  try { claveAdmin = sessionStorage.getItem('claveAdmin'); } catch {}
+
+  function activarModoAdmin(clave) {
+    claveAdmin = clave;
+    try { clave ? sessionStorage.setItem('claveAdmin', clave) : sessionStorage.removeItem('claveAdmin'); } catch {}
+    document.body.classList.toggle('modoAdmin', !!clave);
+  }
+  activarModoAdmin(claveAdmin);
+
+  document.getElementById('formularioAdmin').onsubmit = async (evento) => {
+    evento.preventDefault();
+    const clave = document.getElementById('claveAdmin').value;
+    const respuesta = await fetch('/api/sesion', { method: 'POST', headers: { 'x-clave-admin': clave } });
+    if (!respuesta.ok) return alert('Clave incorrecta');
+    document.getElementById('claveAdmin').value = '';
+    activarModoAdmin(clave);
+  };
+  document.getElementById('salirAdmin').onclick = () => activarModoAdmin(null);
 
   function usarImagen(archivo) {
     if (!tiposPermitidos.includes(archivo.type)) return alert('La imagen debe ser PNG, JPG, GIF o WEBP');
-    if (archivo.size > 5 * 1024 * 1024) return alert('La imagen no puede superar 5 MB');
+    if (archivo.size > 3 * 1024 * 1024) return alert('La imagen no puede superar 3 MB');
     const lector = new FileReader();
     lector.onload = () => {
       imagenPropia = lector.result;
@@ -110,7 +146,7 @@
   quitarImagen.onclick = limpiarImagen;
   document.addEventListener('paste', (evento) => {
     const archivo = [...evento.clipboardData.files].find(f => f.type.startsWith('image/'));
-    if (archivo) { evento.preventDefault(); usarImagen(archivo); }
+    if (archivo && claveAdmin) { evento.preventDefault(); usarImagen(archivo); }
   });
 
   function crearPortada(articulo) {
@@ -134,10 +170,11 @@
     const enlace = Object.assign(document.createElement('a'), { href: `#${articulo.id}`, textContent: articulo.nombre });
     titulo.append(enlace);
     const descripcion = Object.assign(document.createElement('p'), { textContent: articulo.descripcion });
-    const botonBorrar = Object.assign(document.createElement('button'), { className: 'borrar', textContent: 'Eliminar' });
+    const botonBorrar = Object.assign(document.createElement('button'), { className: 'borrar soloAdmin', textContent: 'Eliminar' });
     botonBorrar.onclick = async () => {
       if (!confirm(`¿Eliminar "${articulo.nombre}"?`)) return;
-      await fetch(`/api/articulos/${articulo.id}`, { method: 'DELETE' });
+      const respuesta = await fetch(`/api/articulos/${articulo.id}`, { method: 'DELETE', headers: { 'x-clave-admin': claveAdmin } });
+      if (!respuesta.ok && respuesta.status !== 404) return alert((await respuesta.json()).error);
       articulosPorId.delete(articulo.id);
       tarjeta.remove();
     };
@@ -186,7 +223,7 @@
     boton.textContent = imagenPropia ? 'Guardando...' : 'Buscando portada...';
     const respuesta = await fetch('/api/articulos', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-clave-admin': claveAdmin },
       body: JSON.stringify({ ...Object.fromEntries(new FormData(formulario)), imagen: imagenPropia }),
     });
     const datos = await respuesta.json();
