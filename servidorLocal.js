@@ -10,6 +10,7 @@ const rutas = [
   [/^\/api\/articulos$/, require('./api/articulos')],
   [/^\/api\/articulos\/(\w+)$/, require('./api/articulos/[id]')],
   [/^\/api\/sesion$/, require('./api/sesion')],
+  [/^\/api\/imagen$/, require('./api/imagen')],
 ];
 
 async function manejarPedido(req, res) {
@@ -23,7 +24,7 @@ async function manejarPedido(req, res) {
     const coincidencia = patron.exec(url.pathname);
     if (!coincidencia) continue;
     // Vercel entrega req.query y req.body ya armados; acá se arman a mano
-    req.query = { id: coincidencia[1] };
+    req.query = { ...Object.fromEntries(url.searchParams), id: coincidencia[1] };
     let cuerpo = '';
     for await (const trozo of req) {
       cuerpo += trozo;
