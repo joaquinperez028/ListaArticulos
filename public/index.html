@@ -53,7 +53,11 @@
   footer form { display: flex; gap: 8px; padding: 8px 0 0; margin: 0; background: none; }
   footer input, footer button { padding: 6px 10px; }
   #salirAdmin { background: transparent; color: var(--suave); border: 1px solid #a8a29e55; }
-  .borrar { background: transparent; color: var(--suave); padding: 4px; justify-self: end; font-size: .85rem; }
+  .accionesTarjeta { display: flex; gap: 4px; justify-content: flex-end; }
+  .accionTarjeta { background: transparent; color: var(--suave); padding: 4px 6px; font-size: .85rem; }
+  .accionTarjeta:hover { color: var(--texto); }
+  .botonesFormulario { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  #cancelarEdicion { background: transparent; color: inherit; border: 1px solid #a8a29e55; }
 </style>
 </head>
 <body>
@@ -73,7 +77,10 @@
       <img id="vistaPrevia" alt="Vista previa" hidden>
       <button type="button" id="quitarImagen" hidden>Quitar</button>
     </div>
-    <button id="botonAgregar">Agregar</button>
+    <div class="botonesFormulario">
+      <button id="botonAgregar">Agregar</button>
+      <button type="button" id="cancelarEdicion" hidden>Cancelar</button>
+    </div>
   </form>
   <section class="aviso">
     <h2>Sobre los regalos</h2>
@@ -146,7 +153,12 @@
     lector.readAsDataURL(archivo);
   }
 
+  // Edición: el formulario de arriba se reutiliza para modificar un artículo existente
+  let articuloEditando = null;
+  let modoPortada = 'mantener'; // 'mantener' la portada actual o volver a la 'automatica' del link
+
   function limpiarImagen() {
+    if (articuloEditando) modoPortada = 'automatica';
     imagenPropia = null;
     selectorImagen.value = '';
     vistaPrevia.removeAttribute('src');
@@ -172,6 +184,7 @@
     articulosPorId.set(articulo.id, articulo);
     const tarjeta = document.createElement('article');
     tarjeta.className = 'tarjeta';
+    tarjeta.dataset.id = articulo.id;
     const enlacePortada = Object.assign(document.createElement('a'), { href: `#${articulo.id}`, className: 'enlacePortada', tabIndex: -1 });
     enlacePortada.setAttribute('aria-hidden', 'true');
     enlacePortada.append(crearPortada(articulo));
@@ -181,15 +194,20 @@
     const enlace = Object.assign(document.createElement('a'), { href: `#${articulo.id}`, textContent: articulo.nombre });
     titulo.append(enlace);
     const descripcion = Object.assign(document.createElement('p'), { textContent: articulo.descripcion });
-    const botonBorrar = Object.assign(document.createElement('button'), { className: 'borrar soloAdmin', textContent: 'Eliminar' });
+    const botonEditar = Object.assign(document.createElement('button'), { className: 'accionTarjeta', textContent: 'Editar' });
+    botonEditar.onclick = () => editarArticulo(articulo);
+    const botonBorrar = Object.assign(document.createElement('button'), { className: 'accionTarjeta', textContent: 'Eliminar' });
     botonBorrar.onclick = async () => {
       if (!confirm(`¿Eliminar "${articulo.nombre}"?`)) return;
       const respuesta = await fetch(`/api/articulos/${articulo.id}?lista=${listaActual}`, { method: 'DELETE', headers: { 'x-clave-admin': claveAdmin } });
       if (!respuesta.ok && respuesta.status !== 404) return alert((await respuesta.json()).error);
       articulosPorId.delete(articulo.id);
+      if (articuloEditando?.id === articulo.id) terminarEdicion();
       tarjeta.remove();
     };
-    cuerpo.append(titulo, descripcion, botonBorrar);
+    const acciones = Object.assign(document.createElement('div'), { className: 'accionesTarjeta soloAdmin' });
+    acciones.append(botonEditar, botonBorrar);
+    cuerpo.append(titulo, descripcion, acciones);
     tarjeta.append(enlacePortada, cuerpo);
     return tarjeta;
   }
@@ -274,21 +292,56 @@
   detalle.onclick = (evento) => { if (evento.target === detalle) cerrarDetalle(); }; // click en el fondo
   detalle.onclose = limpiarUrl; // cierre con Esc
 
+  const botonAgregar = document.getElementById('botonAgregar');
+  const cancelarEdicion = document.getElementById('cancelarEdicion');
+
+  function editarArticulo(articulo) {
+    terminarEdicion();
+    articuloEditando = articulo;
+    modoPortada = 'mantener';
+    formulario.nombre.value = articulo.nombre;
+    formulario.descripcion.value = articulo.descripcion;
+    formulario.link.value = articulo.link;
+    if (articulo.portada) {
+      vistaPrevia.src = articulo.portada;
+      vistaPrevia.hidden = quitarImagen.hidden = false;
+    }
+    botonAgregar.textContent = 'Guardar cambios';
+    cancelarEdicion.hidden = false;
+    formulario.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    formulario.nombre.focus({ preventScroll: true });
+  }
+
+  function terminarEdicion() {
+    articuloEditando = null;
+    formulario.reset();
+    limpiarImagen();
+    botonAgregar.textContent = 'Agregar';
+    cancelarEdicion.hidden = true;
+  }
+  cancelarEdicion.onclick = terminarEdicion;
+
   formulario.onsubmit = async (evento) => {
     evento.preventDefault();
-    const boton = document.getElementById('botonAgregar');
-    boton.disabled = true;
-    boton.textContent = imagenPropia ? 'Guardando...' : 'Buscando portada...';
-    const respuesta = await fetch(`/api/articulos?lista=${listaActual}`, {
-      method: 'POST',
+    const textoBoton = botonAgregar.textContent;
+    botonAgregar.disabled = true;
+    botonAgregar.textContent = 'Guardando...';
+    const campos = Object.fromEntries(new FormData(formulario));
+    const pedido = articuloEditando
+      ? { url: `/api/articulos/${articuloEditando.id}?lista=${listaActual}`, method: 'PATCH', imagen: imagenPropia || modoPortada }
+      : { url: `/api/articulos?lista=${listaActual}`, method: 'POST', imagen: imagenPropia };
+    const respuesta = await fetch(pedido.url, {
+      method: pedido.method,
       headers: { 'Content-Type': 'application/json', 'x-clave-admin': claveAdmin },
-      body: JSON.stringify({ ...Object.fromEntries(new FormData(formulario)), imagen: imagenPropia }),
+      body: JSON.stringify({ ...campos, imagen: pedido.imagen }),
     });
     const datos = await respuesta.json();
-    if (respuesta.ok) { lista.prepend(crearTarjeta(datos)); formulario.reset(); limpiarImagen(); }
-    else alert(datos.error);
-    boton.disabled = false;
-    boton.textContent = 'Agregar';
+    botonAgregar.disabled = false;
+    botonAgregar.textContent = textoBoton;
+    if (!respuesta.ok) return alert(datos.error);
+    if (articuloEditando) lista.querySelector(`[data-id="${datos.id}"]`)?.replaceWith(crearTarjeta(datos));
+    else lista.prepend(crearTarjeta(datos));
+    terminarEdicion();
   };
 
   cargarArticulos();

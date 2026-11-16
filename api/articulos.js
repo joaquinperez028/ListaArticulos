@@ -1,7 +1,7 @@
 // GET: lista pública. POST: agregar artículo (solo administrador). La pestaña llega en ?lista=.
 const BaseDeDatos = require('../lib/baseDeDatos');
 const { obtenerLista } = require('../lib/listas');
-const { ErrorDeValidacion, responder, esAdmin, esLinkValido, obtenerPortada, guardarImagenPropia } = require('../lib/utilidades');
+const { ErrorDeValidacion, responder, esAdmin, validarArticulo, obtenerPortada, guardarImagenPropia } = require('../lib/utilidades');
 
 module.exports = async (req, res) => {
   const lista = await obtenerLista(req);
@@ -13,18 +13,13 @@ module.exports = async (req, res) => {
   if (!esAdmin(req)) return responder(res, 401, { error: 'Clave de administrador incorrecta' });
 
   const datos = req.body || {};
-  const nombre = String(datos.nombre || '').trim();
-  const descripcion = String(datos.descripcion || '').trim();
-  const link = String(datos.link || '').trim();
-  if (!nombre || !esLinkValido(link)) return responder(res, 400, { error: 'Nombre y link http(s) son obligatorios' });
-
   const id = Date.now().toString();
-  let portada;
   try {
-    portada = datos.imagen ? await guardarImagenPropia(String(datos.imagen), id) : await obtenerPortada(link);
+    const campos = validarArticulo(datos);
+    const portada = datos.imagen ? await guardarImagenPropia(String(datos.imagen), id) : await obtenerPortada(campos.link);
+    responder(res, 201, await baseDeDatos.agregar({ id, ...campos, portada }));
   } catch (error) {
     if (error instanceof ErrorDeValidacion) return responder(res, 400, { error: error.message });
     throw error;
   }
-  responder(res, 201, await baseDeDatos.agregar({ id, nombre, descripcion, link, portada }));
 };
