@@ -12,13 +12,19 @@ const rutas = [
   [/^\/api\/sesion$/, require('./api/sesion')],
   [/^\/api\/listas$/, require('./api/listas')],
   [/^\/api\/imagen$/, require('./api/imagen')],
+  [/^\/api\/estilo$/, require('./api/estilo')],
 ];
+const tiposArchivo = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8' };
 
 async function manejarPedido(req, res) {
   const url = new URL(req.url, 'http://localhost');
-  if (req.method === 'GET' && url.pathname === '/') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return fs.createReadStream(path.join(__dirname, 'public', 'index.html')).pipe(res);
+  // Archivos de public/ (index.html, personalizar.js); el patrón impide salir de la carpeta
+  const archivoPublico = req.method === 'GET' && /^\/([\w-]+\.(html|js|css))?$/.exec(url.pathname);
+  if (archivoPublico) {
+    const ruta = path.join(__dirname, 'public', archivoPublico[1] || 'index.html');
+    if (!fs.existsSync(ruta)) return responder(res, 404, { error: 'No encontrado' });
+    res.writeHead(200, { 'Content-Type': tiposArchivo[archivoPublico[2] || 'html'] });
+    return fs.createReadStream(ruta).pipe(res);
   }
 
   for (const [patron, funcion] of rutas) {

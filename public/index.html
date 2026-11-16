@@ -5,17 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lista de artículos</title>
 <style>
-  :root { color-scheme: light dark; --fondo: #f5f5f4; --tarjeta: #fff; --texto: #1c1917; --suave: #78716c; --acento: #2563eb; }
+  :root { --fuente: system-ui, sans-serif; --tamanoTexto: 16px; --radio: 12px; --anchoTarjeta: 240px; color-scheme: light dark; --fondo: #f5f5f4; --tarjeta: #fff; --texto: #1c1917; --suave: #78716c; --acento: #2563eb; }
   @media (prefers-color-scheme: dark) { :root { --fondo: #1c1917; --tarjeta: #292524; --texto: #f5f5f4; --suave: #a8a29e; } }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; background: var(--fondo); color: var(--texto); }
-  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px; }
-  form { display: grid; gap: 8px; background: var(--tarjeta); padding: 16px; border-radius: 12px; margin-bottom: 24px; }
+  body { margin: 0; font-family: var(--fuente); font-size: var(--tamanoTexto); background: var(--fondo); color: var(--texto); position: relative; overflow-x: clip; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px; position: relative; z-index: 1; }
+  form { display: grid; gap: 8px; background: var(--tarjeta); padding: 16px; border-radius: var(--radio); margin-bottom: 24px; }
   input, textarea, button { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid #a8a29e55; background: transparent; color: inherit; }
   button { background: var(--acento); color: #fff; border: none; cursor: pointer; }
   button:disabled { opacity: .6; }
-  #lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-  .tarjeta { background: var(--tarjeta); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  #lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--anchoTarjeta), 100%), 1fr)); gap: 16px; }
+  .tarjeta { background: var(--tarjeta); border-radius: var(--radio); overflow: hidden; display: flex; flex-direction: column; }
   .tarjeta img, .sinPortada { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #a8a29e33; display: grid; place-items: center; color: var(--suave); }
   .cuerpo { padding: 12px; display: grid; gap: 6px; flex: 1; align-content: start; }
   .cuerpo h2 { margin: 0; font-size: 1.05rem; }
@@ -23,7 +23,7 @@
   .cuerpo h2 a:hover { text-decoration: underline; }
   .cuerpo p { margin: 0; color: var(--suave); font-size: .9rem; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .enlacePortada { display: block; }
-  #detalle { width: min(720px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; border: none; border-radius: 12px; background: var(--tarjeta); color: var(--texto); }
+  #detalle { width: min(720px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; border: none; border-radius: var(--radio); background: var(--tarjeta); color: var(--texto); }
   #detalle::backdrop { background: #0009; }
   #detalle img, #detalle .sinPortada { width: 100%; max-height: 60vh; object-fit: contain; background: #a8a29e22; display: block; }
   #detalle .sinPortada { aspect-ratio: 16/9; display: grid; place-items: center; color: var(--suave); }
@@ -44,11 +44,38 @@
   .pestanas button, .encabezadoLista button { background: transparent; color: var(--suave); border: 1px solid #a8a29e55; padding: 6px 12px; font-size: .85rem; }
   .pestanas button { margin: 4px 0 4px auto; }
   .encabezadoLista { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .aviso { background: var(--tarjeta); border-left: 4px solid var(--acento); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; }
+  /* Imágenes decorativas: detrás (z-index 0) o delante (2) del contenido, que está en z-index 1 */
+  #decoraciones { position: absolute; top: 0; left: 0; width: 100%; height: 0; }
+  #decoraciones img { position: absolute; pointer-events: none; user-select: none; max-width: none; }
+  #decoraciones.editando img { pointer-events: auto; cursor: move; touch-action: none; }
+  #decoraciones.editando img.seleccionada { outline: 2px dashed #3b82f6; outline-offset: 2px; }
+  /* El panel usa colores propios para seguir siendo legible con cualquier personalización */
+  #panelEstilo { position: fixed; top: 0; right: 0; z-index: 20; width: min(320px, 100%); height: 100vh; overflow-y: auto; box-sizing: border-box; padding: 16px; background: #1c1917; color: #f5f5f4; font: 14px system-ui, sans-serif; box-shadow: -4px 0 24px #0006; }
+  #panelEstilo h2 { margin: 0; font-size: 1.1rem; }
+  #panelEstilo h3 { margin: 18px 0 8px; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: #a8a29e; }
+  #panelEstilo label { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; margin-bottom: 10px; }
+  #panelEstilo label:has(input[type=range]) { grid-template-columns: 1fr 3.5em; }
+  #panelEstilo label:has(input[type=range]) span { grid-column: 1 / -1; }
+  #panelEstilo output { text-align: right; color: #a8a29e; }
+  #panelEstilo select, #panelEstilo input[type=color] { background: #292524; color: inherit; border: 1px solid #57534e; border-radius: 6px; padding: 4px; }
+  #panelEstilo input[type=color] { width: 48px; height: 32px; padding: 2px; }
+  #panelEstilo input[type=range] { width: 100%; padding: 0; }
+  #panelEstilo button { background: #292524; color: inherit; border: 1px solid #57534e; padding: 8px 12px; border-radius: 6px; font: inherit; cursor: pointer; }
+  #panelEstilo .encabezadoPanel { display: flex; justify-content: space-between; align-items: center; }
+  #panelEstilo .ayuda { color: #a8a29e; margin: 6px 0 10px; }
+  #panelEstilo .subirImagen { display: block; text-align: center; background: #292524; border: 1px dashed #57534e; border-radius: 6px; padding: 10px; cursor: pointer; }
+  #panelEstilo .subirImagen input { display: none; }
+  #miniaturasDecoracion { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; margin-bottom: 10px; }
+  #miniaturasDecoracion button { padding: 0; aspect-ratio: 1; overflow: hidden; border: 2px solid #57534e; border-radius: 6px; background: #292524 center / cover no-repeat; }
+  #miniaturasDecoracion button[aria-pressed="true"] { border-color: #3b82f6; }
+  #controlesDecoracion { border: 1px solid #57534e; border-radius: 8px; padding: 10px; }
+  #panelEstilo .accionesPanel { position: sticky; bottom: -16px; display: flex; gap: 8px; flex-wrap: wrap; background: #1c1917; padding: 12px 0 16px; margin-top: 16px; }
+  #panelEstilo #guardarEstilo { background: #2563eb; border-color: #2563eb; }
+  .aviso { background: var(--tarjeta); border-left: 4px solid var(--acento); border-radius: var(--radio); padding: 16px 20px; margin-bottom: 24px; }
   .aviso h2 { margin: 0 0 6px; font-size: 1.1rem; }
   .aviso p { margin: 0; line-height: 1.5; }
   body:not(.modoAdmin) .soloAdmin, .modoAdmin .soloVisitante { display: none !important; }
-  footer { max-width: 1000px; margin: 0 auto; padding: 8px 16px 32px; color: var(--suave); font-size: .85rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  footer { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 8px 16px 32px; color: var(--suave); font-size: .85rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   footer summary { cursor: pointer; }
   footer form { display: flex; gap: 8px; padding: 8px 0 0; margin: 0; background: none; }
   footer input, footer button { padding: 6px 10px; }
@@ -66,6 +93,7 @@
   <div class="encabezadoLista">
     <h1 id="tituloLista">Lista de artículos</h1>
     <button type="button" id="renombrarLista" class="soloAdmin">Renombrar</button>
+    <button type="button" id="abrirPanelEstilo" class="soloAdmin">Personalizar</button>
   </div>
   <form id="formulario" class="soloAdmin">
     <input name="nombre" placeholder="Nombre del artículo" required>
@@ -88,6 +116,43 @@
   </section>
   <div id="lista"></div>
 </main>
+<div id="decoraciones" aria-hidden="true"></div>
+<aside id="panelEstilo" class="soloAdmin" aria-label="Personalizar lista" hidden>
+  <div class="encabezadoPanel">
+    <h2>Personalizar esta lista</h2>
+    <button type="button" id="cerrarPanelEstilo" aria-label="Cerrar">✕</button>
+  </div>
+  <h3>Texto</h3>
+  <label>Fuente <select id="estiloFuente"></select></label>
+  <label><span>Tamaño del texto</span><input type="range" data-campo="tamanoTexto" min="12" max="24" step="1"><output></output></label>
+  <h3>Colores</h3>
+  <label>Fondo de la página <input type="color" data-color="fondo"></label>
+  <label>Tarjetas y cajas <input type="color" data-color="tarjeta"></label>
+  <label>Texto <input type="color" data-color="texto"></label>
+  <label>Texto secundario <input type="color" data-color="suave"></label>
+  <label>Botones y acentos <input type="color" data-color="acento"></label>
+  <button type="button" id="coloresDelTema">Usar colores del tema</button>
+  <h3>Componentes</h3>
+  <label><span>Bordes redondeados</span><input type="range" data-campo="radio" min="0" max="32" step="1"><output></output></label>
+  <label><span>Ancho de las tarjetas</span><input type="range" data-campo="anchoTarjeta" min="160" max="420" step="10"><output></output></label>
+  <h3>Imágenes</h3>
+  <label class="subirImagen">+ Agregar imágenes<input type="file" id="nuevaDecoracion" accept="image/png,image/jpeg,image/gif,image/webp" multiple></label>
+  <p class="ayuda">Arrastrá las imágenes en la página para moverlas. Elegí una abajo (o tocála en la página) para ajustarla.</p>
+  <div id="miniaturasDecoracion" role="group" aria-label="Imágenes agregadas"></div>
+  <div id="controlesDecoracion" hidden>
+    <label><span>Tamaño</span><input type="range" data-decoracion="ancho" min="20" max="1200" step="5"><output></output></label>
+    <label><span>Opacidad</span><input type="range" data-decoracion="opacidad" min="0" max="1" step="0.05"><output></output></label>
+    <label><span>Bordes redondeados</span><input type="range" data-decoracion="radio" min="0" max="50" step="1"><output></output></label>
+    <label><span>Rotación</span><input type="range" data-decoracion="rotacion" min="-180" max="180" step="1"><output></output></label>
+    <label>Delante del contenido <input type="checkbox" data-decoracion="delante"></label>
+    <button type="button" id="eliminarDecoracion">Eliminar imagen</button>
+  </div>
+  <div class="accionesPanel">
+    <button type="button" id="guardarEstilo">Guardar</button>
+    <button type="button" id="cancelarEstilo">Cancelar</button>
+    <button type="button" id="restablecerEstilo">Restablecer</button>
+  </div>
+</aside>
 <footer>
   <details class="soloVisitante">
     <summary>Administrar</summary>
@@ -111,6 +176,7 @@
     </div>
   </div>
 </dialog>
+<script src="personalizar.js"></script>
 <script>
   const formulario = document.getElementById('formulario');
   const lista = document.getElementById('lista');
@@ -128,6 +194,7 @@
     claveAdmin = clave;
     try { clave ? sessionStorage.setItem('claveAdmin', clave) : sessionStorage.removeItem('claveAdmin'); } catch {}
     document.body.classList.toggle('modoAdmin', !!clave);
+    if (!clave) cancelarEdicionEstilo(); // al salir se descartan los cambios sin guardar
   }
   activarModoAdmin(claveAdmin);
 
@@ -260,6 +327,7 @@
 
   async function cargarArticulos() {
     await cargarPestanas();
+    cargarEstilo();
     const articulos = await (await fetch(`/api/articulos?lista=${listaActual}`)).json();
     lista.replaceChildren(...articulos.map(crearTarjeta));
     mostrarDetalleSegunUrl();
