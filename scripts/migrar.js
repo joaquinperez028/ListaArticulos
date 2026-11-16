@@ -9,7 +9,7 @@ const raiz = path.join(__dirname, '..');
 const tiposPorExtension = Object.fromEntries(Object.entries(extensionesPorTipo).map(([tipo, extension]) => [extension, tipo]));
 
 async function migrar() {
-  const baseDeDatos = new BaseDeDatos();
+  const baseDeDatos = new BaseDeDatos('articulos');
   const existentes = await baseDeDatos.listar();
   if (existentes.length && !process.argv.includes('--forzar')) {
     throw new Error(`La base ya tiene ${existentes.length} artículos. Usá --forzar para reemplazarlos.`);

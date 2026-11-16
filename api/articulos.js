@@ -1,10 +1,13 @@
-// GET: lista pública. POST: agregar artículo (solo administrador).
+// GET: lista pública. POST: agregar artículo (solo administrador). La pestaña llega en ?lista=.
 const BaseDeDatos = require('../lib/baseDeDatos');
+const { obtenerLista } = require('../lib/listas');
 const { ErrorDeValidacion, responder, esAdmin, esLinkValido, obtenerPortada, guardarImagenPropia } = require('../lib/utilidades');
 
-const baseDeDatos = new BaseDeDatos();
-
 module.exports = async (req, res) => {
+  const lista = await obtenerLista(req);
+  if (!lista) return responder(res, 404, { error: 'La lista no existe' });
+  const baseDeDatos = new BaseDeDatos(lista.claveRedis);
+
   if (req.method === 'GET') return responder(res, 200, await baseDeDatos.listar());
   if (req.method !== 'POST') return responder(res, 405, { error: 'Método no permitido' });
   if (!esAdmin(req)) return responder(res, 401, { error: 'Clave de administrador incorrecta' });

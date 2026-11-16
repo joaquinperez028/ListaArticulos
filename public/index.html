@@ -37,6 +37,13 @@
   .zonaImagen { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; border: 1px dashed #a8a29e88; border-radius: 8px; padding: 10px; color: var(--suave); font-size: .9rem; }
   .zonaImagen img { height: 64px; border-radius: 6px; }
   .zonaImagen button { padding: 4px 10px; background: transparent; color: var(--suave); border: 1px solid #a8a29e55; }
+  .pestanas { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid #a8a29e55; margin-bottom: 8px; }
+  .pestanas a { padding: 10px 16px; color: var(--suave); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .pestanas a:hover { color: var(--texto); }
+  .pestanas a[aria-current="page"] { color: var(--texto); border-bottom-color: var(--acento); font-weight: 600; }
+  .pestanas button, .encabezadoLista button { background: transparent; color: var(--suave); border: 1px solid #a8a29e55; padding: 6px 12px; font-size: .85rem; }
+  .pestanas button { margin: 4px 0 4px auto; }
+  .encabezadoLista { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .aviso { background: var(--tarjeta); border-left: 4px solid var(--acento); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; }
   .aviso h2 { margin: 0 0 6px; font-size: 1.1rem; }
   .aviso p { margin: 0; line-height: 1.5; }
@@ -51,7 +58,11 @@
 </head>
 <body>
 <main>
-  <h1>Lista de artículos</h1>
+  <nav class="pestanas" id="pestanas" aria-label="Listas"></nav>
+  <div class="encabezadoLista">
+    <h1 id="tituloLista">Lista de artículos</h1>
+    <button type="button" id="renombrarLista" class="soloAdmin">Renombrar</button>
+  </div>
   <form id="formulario" class="soloAdmin">
     <input name="nombre" placeholder="Nombre del artículo" required>
     <textarea name="descripcion" placeholder="Descripción" rows="2"></textarea>
@@ -173,7 +184,7 @@
     const botonBorrar = Object.assign(document.createElement('button'), { className: 'borrar soloAdmin', textContent: 'Eliminar' });
     botonBorrar.onclick = async () => {
       if (!confirm(`¿Eliminar "${articulo.nombre}"?`)) return;
-      const respuesta = await fetch(`/api/articulos/${articulo.id}`, { method: 'DELETE', headers: { 'x-clave-admin': claveAdmin } });
+      const respuesta = await fetch(`/api/articulos/${articulo.id}?lista=${listaActual}`, { method: 'DELETE', headers: { 'x-clave-admin': claveAdmin } });
       if (!respuesta.ok && respuesta.status !== 404) return alert((await respuesta.json()).error);
       articulosPorId.delete(articulo.id);
       tarjeta.remove();
@@ -183,8 +194,55 @@
     return tarjeta;
   }
 
+  // Pestaña elegida en ?lista=; cada una tiene sus propios artículos
+  let listaActual = new URLSearchParams(location.search).get('lista');
+
+  async function cargarPestanas() {
+    const listas = await (await fetch('/api/listas')).json();
+    if (!listas.some(lista => lista.id === listaActual)) listaActual = listas[0].id;
+    const pestanas = listas.map(lista => {
+      const pestana = Object.assign(document.createElement('a'), { href: `?lista=${lista.id}`, textContent: lista.nombre });
+      if (lista.id === listaActual) {
+        pestana.setAttribute('aria-current', 'page');
+        document.getElementById('tituloLista').textContent = `Lista de ${lista.nombre}`;
+        document.title = `Lista de ${lista.nombre}`;
+      }
+      return pestana;
+    });
+    const botonNuevaLista = Object.assign(document.createElement('button'), { type: 'button', className: 'soloAdmin', textContent: '+ Nueva lista' });
+    botonNuevaLista.onclick = crearLista;
+    document.getElementById('pestanas').replaceChildren(...pestanas, botonNuevaLista);
+  }
+
+  // Crear y renombrar mandan el nombre al servidor, que valida la clave de administrador
+  async function enviarLista(metodo, url, nombre) {
+    const respuesta = await fetch(url, {
+      method: metodo,
+      headers: { 'Content-Type': 'application/json', 'x-clave-admin': claveAdmin },
+      body: JSON.stringify({ nombre }),
+    });
+    const datos = await respuesta.json();
+    if (!respuesta.ok) { alert(datos.error); return null; }
+    return datos;
+  }
+
+  async function crearLista() {
+    const nombre = prompt('Nombre de la nueva lista:');
+    if (!nombre?.trim()) return;
+    const lista = await enviarLista('POST', '/api/listas', nombre);
+    if (lista) location.href = `?lista=${lista.id}`;
+  }
+
+  document.getElementById('renombrarLista').onclick = async () => {
+    const nombreActual = document.getElementById('tituloLista').textContent.replace(/^Lista de /, '');
+    const nombre = prompt('Nuevo nombre de la lista:', nombreActual);
+    if (!nombre?.trim() || nombre.trim() === nombreActual) return;
+    if (await enviarLista('PATCH', `/api/listas?id=${listaActual}`, nombre)) cargarPestanas();
+  };
+
   async function cargarArticulos() {
-    const articulos = await (await fetch('/api/articulos')).json();
+    await cargarPestanas();
+    const articulos = await (await fetch(`/api/articulos?lista=${listaActual}`)).json();
     lista.replaceChildren(...articulos.map(crearTarjeta));
     mostrarDetalleSegunUrl();
   }
@@ -206,7 +264,7 @@
 
   window.addEventListener('hashchange', mostrarDetalleSegunUrl);
   function limpiarUrl() {
-    if (location.hash) history.replaceState(null, '', location.pathname);
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   }
   function cerrarDetalle() {
     detalle.close();
@@ -221,7 +279,7 @@
     const boton = document.getElementById('botonAgregar');
     boton.disabled = true;
     boton.textContent = imagenPropia ? 'Guardando...' : 'Buscando portada...';
-    const respuesta = await fetch('/api/articulos', {
+    const respuesta = await fetch(`/api/articulos?lista=${listaActual}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-clave-admin': claveAdmin },
       body: JSON.stringify({ ...Object.fromEntries(new FormData(formulario)), imagen: imagenPropia }),
