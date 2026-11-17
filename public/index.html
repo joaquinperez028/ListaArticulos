@@ -90,6 +90,12 @@
   .accionTarjeta:hover { color: var(--texto); }
   .botonesFormulario { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
   #cancelarEdicion { background: transparent; color: inherit; border: 1px solid #a8a29e55; }
+  .casillaRecibido { display: flex; gap: 8px; align-items: center; }
+  .casillaRecibido input { width: auto; margin: 0; }
+  .precio { font-weight: 600; }
+  .etiquetaRecibido { justify-self: start; background: #16a34a; color: #fff; font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .tarjeta.recibido { opacity: .55; }
+  #mensajeLista { color: var(--suave); text-align: center; padding: 32px 16px; margin: 0; }
 </style>
 </head>
 <body>
@@ -105,6 +111,8 @@
     <input name="nombre" placeholder="Nombre del artículo" required>
     <textarea name="descripcion" placeholder="Descripción" rows="2"></textarea>
     <input name="link" type="url" placeholder="https://..." required>
+    <input name="precio" placeholder="Precio (opcional), ej. $ 25.000" maxlength="30">
+    <label class="casillaRecibido"><input type="checkbox" name="recibido"> Ya lo recibí</label>
     <div class="zonaImagen">
       <label>Imagen propia (opcional): <input type="file" id="selectorImagen" accept="image/png,image/jpeg,image/gif,image/webp"></label>
       <span>o pegá una imagen con Ctrl+V</span>
@@ -132,6 +140,7 @@
     </form>
   </section>
   <div id="lista"></div>
+  <p id="mensajeLista" hidden></p>
 </main>
 <div id="decoraciones" aria-hidden="true"></div>
 <aside id="panelEstilo" class="soloAdmin" aria-label="Personalizar lista" hidden>
@@ -186,6 +195,8 @@
   <div class="contenidoDetalle">
     <h2 id="nombreDetalle"></h2>
     <div class="datosDetalle" id="datosDetalle"></div>
+    <span class="etiquetaRecibido" id="recibidoDetalle" hidden>Ya fue recibido</span>
+    <p class="precio" id="precioDetalle" hidden></p>
     <p id="descripcionDetalle"></p>
     <div class="accionesDetalle">
       <button type="button" id="cerrarDetalle">Cerrar</button>
@@ -278,20 +289,30 @@
     const enlace = Object.assign(document.createElement('a'), { href: `#${articulo.id}`, textContent: articulo.nombre });
     titulo.append(enlace);
     const descripcion = Object.assign(document.createElement('p'), { textContent: articulo.descripcion });
+    cuerpo.append(titulo);
+    // Atenuado y con etiqueta para que nadie compre algo que ya fue regalado
+    tarjeta.classList.toggle('recibido', !!articulo.recibido);
+    if (articulo.recibido) cuerpo.append(Object.assign(document.createElement('span'), { className: 'etiquetaRecibido', textContent: 'Recibido' }));
+    if (articulo.precio) cuerpo.append(Object.assign(document.createElement('span'), { className: 'precio', textContent: articulo.precio }));
     const botonEditar = Object.assign(document.createElement('button'), { className: 'accionTarjeta', textContent: 'Editar' });
     botonEditar.onclick = () => editarArticulo(articulo);
     const botonBorrar = Object.assign(document.createElement('button'), { className: 'accionTarjeta', textContent: 'Eliminar' });
     botonBorrar.onclick = async () => {
       if (!confirm(`¿Eliminar "${articulo.nombre}"?`)) return;
-      const respuesta = await fetch(`/api/articulos/${articulo.id}?lista=${listaActual}`, { method: 'DELETE', headers: { 'x-clave-admin': claveAdmin } });
-      if (!respuesta.ok && respuesta.status !== 404) return alert((await respuesta.json()).error);
+      try {
+        const respuesta = await fetch(`/api/articulos/${articulo.id}?lista=${listaActual}`, { method: 'DELETE', headers: { 'x-clave-admin': claveAdmin } });
+        if (!respuesta.ok && respuesta.status !== 404) return alert((await respuesta.json()).error);
+      } catch (error) {
+        return alert(`No se pudo eliminar: ${error.message}`);
+      }
       articulosPorId.delete(articulo.id);
       if (articuloEditando?.id === articulo.id) terminarEdicion();
       tarjeta.remove();
+      mostrarListaVacia();
     };
     const acciones = Object.assign(document.createElement('div'), { className: 'accionesTarjeta soloAdmin' });
     acciones.append(botonEditar, botonBorrar);
-    cuerpo.append(titulo, descripcion, acciones);
+    cuerpo.append(descripcion, acciones);
     tarjeta.append(enlacePortada, cuerpo);
     return tarjeta;
   }
@@ -386,11 +407,29 @@
     mostrarAviso();
   };
 
+  // Un solo párrafo bajo la grilla para la lista vacía y para los errores de carga
+  const mensajeLista = document.getElementById('mensajeLista');
+  function mostrarMensaje(texto) {
+    mensajeLista.textContent = texto;
+    mensajeLista.hidden = !texto;
+  }
+  function mostrarListaVacia() {
+    mostrarMensaje(lista.children.length ? '' : 'Todavía no hay artículos en esta lista.');
+  }
+
   async function cargarArticulos() {
-    await cargarPestanas();
-    cargarEstilo();
-    const articulos = await (await fetch(`/api/articulos?lista=${listaActual}`)).json();
-    lista.replaceChildren(...articulos.map(crearTarjeta));
+    try {
+      await cargarPestanas();
+      cargarEstilo();
+      const respuesta = await fetch(`/api/articulos?lista=${listaActual}`);
+      if (!respuesta.ok) throw new Error(`error ${respuesta.status}`);
+      const articulos = await respuesta.json();
+      lista.replaceChildren(...articulos.map(crearTarjeta));
+    } catch (error) {
+      console.error(error);
+      return mostrarMensaje('No se pudieron cargar los artículos. Revisá tu conexión y recargá la página.');
+    }
+    mostrarListaVacia();
     mostrarDetalleSegunUrl();
   }
 
@@ -403,6 +442,10 @@
     document.getElementById('portadaDetalle').replaceChildren(portada);
     document.getElementById('nombreDetalle').textContent = articulo.nombre;
     document.getElementById('descripcionDetalle').textContent = articulo.descripcion || 'Sin descripción';
+    const precioDetalle = document.getElementById('precioDetalle');
+    precioDetalle.textContent = articulo.precio || '';
+    precioDetalle.hidden = !articulo.precio;
+    document.getElementById('recibidoDetalle').hidden = !articulo.recibido;
     const fecha = new Date(Number(articulo.id)).toLocaleDateString('es', { dateStyle: 'long' });
     document.getElementById('datosDetalle').textContent = `${new URL(articulo.link).hostname} · agregado el ${fecha}`;
     document.getElementById('linkDetalle').href = articulo.link;
@@ -431,6 +474,8 @@
     formulario.nombre.value = articulo.nombre;
     formulario.descripcion.value = articulo.descripcion;
     formulario.link.value = articulo.link;
+    formulario.precio.value = articulo.precio || '';
+    formulario.recibido.checked = !!articulo.recibido;
     if (articulo.portada) {
       vistaPrevia.src = articulo.portada;
       vistaPrevia.hidden = quitarImagen.hidden = false;
@@ -459,17 +504,25 @@
     const pedido = articuloEditando
       ? { url: `/api/articulos/${articuloEditando.id}?lista=${listaActual}`, method: 'PATCH', imagen: imagenPropia || modoPortada }
       : { url: `/api/articulos?lista=${listaActual}`, method: 'POST', imagen: imagenPropia };
-    const respuesta = await fetch(pedido.url, {
-      method: pedido.method,
-      headers: { 'Content-Type': 'application/json', 'x-clave-admin': claveAdmin },
-      body: JSON.stringify({ ...campos, imagen: pedido.imagen }),
-    });
-    const datos = await respuesta.json();
-    botonAgregar.disabled = false;
-    botonAgregar.textContent = textoBoton;
+    let respuesta, datos;
+    try {
+      respuesta = await fetch(pedido.url, {
+        method: pedido.method,
+        headers: { 'Content-Type': 'application/json', 'x-clave-admin': claveAdmin },
+        // FormData manda 'on' o nada para la casilla; el servidor espera un booleano
+        body: JSON.stringify({ ...campos, recibido: formulario.recibido.checked, imagen: pedido.imagen }),
+      });
+      datos = await respuesta.json();
+    } catch (error) {
+      return alert(`No se pudo guardar: ${error.message}`);
+    } finally {
+      botonAgregar.disabled = false;
+      botonAgregar.textContent = textoBoton;
+    }
     if (!respuesta.ok) return alert(datos.error);
     if (articuloEditando) lista.querySelector(`[data-id="${datos.id}"]`)?.replaceWith(crearTarjeta(datos));
     else lista.prepend(crearTarjeta(datos));
+    mostrarListaVacia();
     terminarEdicion();
   };
 
