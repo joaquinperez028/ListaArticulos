@@ -73,7 +73,12 @@
   #panelEstilo #guardarEstilo { background: #2563eb; border-color: #2563eb; }
   .aviso { background: var(--tarjeta); border-left: 4px solid var(--acento); border-radius: var(--radio); padding: 16px 20px; margin-bottom: 24px; }
   .aviso h2 { margin: 0 0 6px; font-size: 1.1rem; }
-  .aviso p { margin: 0; line-height: 1.5; }
+  .aviso p { margin: 0; line-height: 1.5; white-space: pre-line; }
+  .aviso h2:empty, .aviso p:empty { display: none; }
+  .aviso form { padding: 0; margin: 0; }
+  .aviso form[hidden] { display: none; }
+  .accionesAviso { display: flex; gap: 8px; }
+  #editarAviso { margin-top: 10px; background: transparent; color: var(--suave); border: 1px solid #a8a29e55; padding: 6px 12px; font-size: .85rem; }
   body:not(.modoAdmin) .soloAdmin, .modoAdmin .soloVisitante { display: none !important; }
   footer { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 8px 16px 32px; color: var(--suave); font-size: .85rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   footer summary { cursor: pointer; }
@@ -94,6 +99,7 @@
     <h1 id="tituloLista">Lista de artículos</h1>
     <button type="button" id="renombrarLista" class="soloAdmin">Renombrar</button>
     <button type="button" id="abrirPanelEstilo" class="soloAdmin">Personalizar</button>
+    <button type="button" id="eliminarLista" class="soloAdmin">Eliminar lista</button>
   </div>
   <form id="formulario" class="soloAdmin">
     <input name="nombre" placeholder="Nombre del artículo" required>
@@ -110,9 +116,20 @@
       <button type="button" id="cancelarEdicion" hidden>Cancelar</button>
     </div>
   </form>
-  <section class="aviso">
-    <h2>Sobre los regalos</h2>
-    <p>Si bien me encantaría recibir cualquiera de estos artículos completo, con el simple hecho de contribuir con una parte del regalo ya sería muy feliz y me ayudaría un montón</p>
+  <section class="aviso" id="aviso" hidden>
+    <div id="contenidoAviso">
+      <h2 id="tituloAviso"></h2>
+      <p id="textoAviso"></p>
+      <button type="button" id="editarAviso" class="soloAdmin">Editar aviso</button>
+    </div>
+    <form id="formularioAviso" hidden>
+      <input name="titulo" placeholder="Título del aviso" maxlength="80">
+      <textarea name="texto" placeholder="Texto del aviso" rows="4" maxlength="1000"></textarea>
+      <div class="accionesAviso">
+        <button>Guardar</button>
+        <button type="button" id="cancelarAviso">Cancelar</button>
+      </div>
+    </form>
   </section>
   <div id="lista"></div>
 </main>
@@ -281,6 +298,7 @@
 
   // Pestaña elegida en ?lista=; cada una tiene sus propios artículos
   let listaActual = new URLSearchParams(location.search).get('lista');
+  let datosListaActual = null;
 
   async function cargarPestanas() {
     const listas = await (await fetch('/api/listas')).json();
@@ -291,6 +309,8 @@
         pestana.setAttribute('aria-current', 'page');
         document.getElementById('tituloLista').textContent = `Lista de ${lista.nombre}`;
         document.title = `Lista de ${lista.nombre}`;
+        datosListaActual = lista;
+        mostrarAviso();
       }
       return pestana;
     });
@@ -299,12 +319,12 @@
     document.getElementById('pestanas').replaceChildren(...pestanas, botonNuevaLista);
   }
 
-  // Crear y renombrar mandan el nombre al servidor, que valida la clave de administrador
-  async function enviarLista(metodo, url, nombre) {
+  // Crear, renombrar y editar el aviso mandan los cambios al servidor, que valida la clave de administrador
+  async function enviarLista(metodo, url, cuerpo) {
     const respuesta = await fetch(url, {
       method: metodo,
       headers: { 'Content-Type': 'application/json', 'x-clave-admin': claveAdmin },
-      body: JSON.stringify({ nombre }),
+      body: JSON.stringify(cuerpo),
     });
     const datos = await respuesta.json();
     if (!respuesta.ok) { alert(datos.error); return null; }
@@ -314,7 +334,7 @@
   async function crearLista() {
     const nombre = prompt('Nombre de la nueva lista:');
     if (!nombre?.trim()) return;
-    const lista = await enviarLista('POST', '/api/listas', nombre);
+    const lista = await enviarLista('POST', '/api/listas', { nombre });
     if (lista) location.href = `?lista=${lista.id}`;
   }
 
@@ -322,7 +342,48 @@
     const nombreActual = document.getElementById('tituloLista').textContent.replace(/^Lista de /, '');
     const nombre = prompt('Nuevo nombre de la lista:', nombreActual);
     if (!nombre?.trim() || nombre.trim() === nombreActual) return;
-    if (await enviarLista('PATCH', `/api/listas?id=${listaActual}`, nombre)) cargarPestanas();
+    if (await enviarLista('PATCH', `/api/listas?id=${listaActual}`, { nombre })) cargarPestanas();
+  };
+
+  document.getElementById('eliminarLista').onclick = async () => {
+    const nombre = datosListaActual.nombre;
+    if (!confirm(`¿Eliminar la lista "${nombre}"? Se borran todos sus artículos e imágenes y no se puede deshacer.`)) return;
+    const respuesta = await fetch(`/api/listas?id=${listaActual}`, { method: 'DELETE', headers: { 'x-clave-admin': claveAdmin } });
+    if (!respuesta.ok) return alert((await respuesta.json()).error);
+    location.href = '?'; // sin ?lista= se abre la primera que queda
+  };
+
+  // El aviso se escribe con textContent: lo edita el administrador pero lo leen todos
+  const cajaAviso = document.getElementById('aviso');
+  const formularioAviso = document.getElementById('formularioAviso');
+
+  function mostrarAviso() {
+    const { titulo, texto } = datosListaActual.aviso;
+    document.getElementById('tituloAviso').textContent = titulo;
+    document.getElementById('textoAviso').textContent = texto;
+    formularioAviso.hidden = true;
+    document.getElementById('contenidoAviso').hidden = false;
+    // Sin título ni texto la caja solo se ve en modo administrador, para poder volver a escribirlo
+    cajaAviso.hidden = false;
+    cajaAviso.classList.toggle('soloAdmin', !titulo && !texto);
+  }
+
+  document.getElementById('editarAviso').onclick = () => {
+    formularioAviso.titulo.value = datosListaActual.aviso.titulo;
+    formularioAviso.texto.value = datosListaActual.aviso.texto;
+    document.getElementById('contenidoAviso').hidden = true;
+    formularioAviso.hidden = false;
+    formularioAviso.titulo.focus();
+  };
+  document.getElementById('cancelarAviso').onclick = mostrarAviso;
+
+  formularioAviso.onsubmit = async (evento) => {
+    evento.preventDefault();
+    const aviso = { titulo: formularioAviso.titulo.value, texto: formularioAviso.texto.value };
+    const lista = await enviarLista('PATCH', `/api/listas?id=${listaActual}`, { aviso });
+    if (!lista) return;
+    datosListaActual = lista;
+    mostrarAviso();
   };
 
   async function cargarArticulos() {
